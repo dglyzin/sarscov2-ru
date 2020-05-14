@@ -32,6 +32,21 @@ def savegenfile(filename, genomes):
 def filtergenomes(genomes, filter):
     return [genome for genome in genomes if filter in genome["header"] ]
 
+def filtergenomesbyfile(genomes, filterfilename):
+    '''
+    returns filtered list of genomes with headers containing lines from filterfilename
+    '''
+    filteredgenomes = []
+    with open(filterfilename, "r") as f:
+        for line in f:
+            line = line.rstrip()
+            filtered = filtergenomes(genomes,line)
+            for genome in filtered:
+                filteredgenomes.append(genome)
+            if len(filtered)==0:    
+                print("Not found! ", line)            
+    return filteredgenomes
+
 def filtergensize(genomes, direction, size):
     if direction=="greater": 
         return [genome for genome in genomes if len(genome["sequence"])>size ]

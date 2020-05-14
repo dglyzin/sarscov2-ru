@@ -18,6 +18,19 @@ def readgenfile(filename):
     print ("sequences read: ", len(genomes))
     return genomes
 
+def diffheaders(fname1, fname2):
+    genomes1 = readgenfile(fname1)
+    genomes2 = readgenfile(fname2)
+    headers1 = [genome["header"] for genome in genomes1 ]
+    headers2 = [genome["header"] for genome in genomes2 ]
+    for header in headers1:
+        if not (header in headers2):
+            print( header, "from", fname1, "does not exist in", fname2)
+    for header in headers2:
+        if not (header in headers1):
+            print( header, "from", fname2, "does not exist in", fname1)
+    print("diff finished!")
+    
 def savegenfile(filename, genomes):
     count = 0
     with open(filename,'w') as f:

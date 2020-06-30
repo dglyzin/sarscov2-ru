@@ -4,6 +4,12 @@
 ```
    source ~/anaconda3/bin/activate bio
    ~/anaconda3/envs/bio/bin/./conda install r-essentials r-base
+   
+   # install adegenet:
+   ~/anaconda3/envs/bio/bin/./conda install -c conda-forge r-adegenet 
+
+   # install udunits2:
+   ~/anaconda3/envs/bio/bin/./conda install -c conda-forge r-udunits2
 ```
 
 installing packages:<br>

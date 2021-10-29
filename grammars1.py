@@ -27,6 +27,7 @@ import numpy as np
 from functools import reduce
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import networkx as nx
 
 try:
     # import tokentranslator.translator.grammar.cyk as cyk
@@ -432,6 +433,91 @@ def outside(alpha, sent=list('aaabbe'), grammar=grammar1,
 
     return((p, beta))
     
+
+def cyk(sent, i, j, v, gammas, tildas, grammar=None, ts=None):
+    '''p.257 cyk parse algorithm for SCFG'''
+    gamma = cyk
+    fgrammar = factorize(grammar)
+
+    if ts is None:
+        ts = backward.get_probabilities_all(grammar)
+        print("probs:")
+        for rule in ts:
+            print(rule, ": ", ts[rule])
+
+    if (i, j, v) in gammas:
+        return(gammas[(i, j, v)])
+
+    # print("v: ", v)
+    # print("i,j:", (i, j))
+    # print("sent[i: j]: ", sent[i: j])
+
+    if i == j:
+        # print(ts)
+        # print(v)
+        # print(sent[i])
+        # print(ts[(v, sent[i])] if (v, sent[i]) in ts else 0)
+        gamma_new = ts[(v, sent[i])] if (v, sent[i]) in ts else 0
+        tilda_new = (0, 0, 0)
+        gammas[(i, j, v)] = gamma_new
+        tildas[(i, j, v)] = tilda_new
+        return(gamma_new)
+    
+    # print("tilda")
+    # print(tildas)
+    # print("gammas")
+    # print(gammas)
+    
+    iterations = [
+        (
+            gamma(sent, i, k, yz[0], gammas, tildas,
+                  grammar=grammar, ts=ts)
+            * gamma(sent, k+1, j, yz[1], gammas, tildas,
+                    grammar=grammar, ts=ts)
+            * ts[(v, yz)], (yz[0], yz[1], k))
+        for k in range(i, j) for yz in fgrammar[v]
+        if len(yz) > 1]
+    if len(iterations) == 0:
+        # gammas[(i, j, v)] = 0
+        # tildas[(i, j, v)] = 
+        return(0)
+    gamma_new, tilda_new = max(iterations, key=lambda x: x[0])
+    
+    gammas[(i, j, v)] = gamma_new
+    tildas[(i, j, v)] = tilda_new
+    return(gamma_new)
+
+    
+def make_parse_tree(sent, tildas, gammas, idx=None, g=None, level=""):
+    if idx is None:
+        L = len(sent)-1
+        idx = (0, L, "E")
+        g = nx.Graph()
+
+    print("idx:", idx)    
+    y, z, k = tildas[idx]
+    i, j, v = idx
+    
+    if y == z == k == 0:
+        # i == j in this case:
+        # v_new = v+" "+"%.3f" % gammas[(i, j, v)]
+        v_new = v+level
+        g.add_edge(v_new, str(sent[i])+" "+level+" %.3f" % gammas[(i, j, v)])
+        return(g)
+
+    v_new = v+level+"->"+y+" "+z+" "+"%.3f" % gammas[(i, k, y)]
+    g.add_edge(v+level, v_new)
+    g.add_edge(v+level, y+level+"l")
+    # , weight=gammas[(i, k, y)]
+    # v_new = v+"->"+y+" "+z+" "+"%.3f" % gammas[(k+1, j, z)]
+    # g.add_edge(v+level, v_new)
+    g.add_edge(v+level, z+level+"r")
+    g = make_parse_tree(sent, tildas, gammas,
+                        idx=(i, k, y), g=g, level=level+"l")
+    g = make_parse_tree(sent, tildas, gammas,
+                        idx=(k+1, j, z), g=g, level=level+"r")
+    return(g)
+
 
 def inside_rec(sent, i, j, v, grammar=None, ts=None):
     '''Same as inside, but recursive'''
@@ -888,6 +974,92 @@ def test_em_step_rec(sent=list('aae'), grammar=backward.grammar3):
     # print(ps)
 
 
+def test_cyk():
+    gammas = {}
+    tildas = {}
+    res = cyk(list('aae'), 0, 2, 'E', gammas, tildas, grammar=backward.grammar3)
+    print(res)
+    for idx in gammas:
+        print(idx, ": ", gammas[idx], "; ", tildas[idx])
+    g = make_parse_tree(list('aae'), tildas, gammas)
+    print("g:")
+    print(g.edges)
+    layout = nx.spring_layout(g)
+    nx.draw(g, pos=layout)
+    nx.draw_networkx_labels(g, layout, font_size=12)
+    plt.show()
+
+
+grammar_subjunctive = [
+
+    ("E", ("CONDIF",)), ("E", ("CONDUNLESS",)),
+    ('CONDIF', ('IF', 'A', 'B')), 
+    ('CONDUNLESS', ('UNLESS', 'B', 'A', )),
+    ('CONDUNLESS', ('B', 'UNLESS','A')),
+    ('A', ('OTHERS', 'PAST', 'OTHERS')), ('A', ('OTHERS', 'HPAST', 'OTHERS')),
+    ('B', ('OTHERS', 'WOULD', 'OTHERS')), ('B', ('OTHERS', 'WOULD','HPAST','OTHERS')),
+
+    ('IF', ('if',)), ('IF', ('but_for',)), ('IF', ('even_if',)),
+    ('IF', ('even though', )),
+    ('IF', ('if where not for', )),
+
+    ('UNLESS', ('unless',)), ('UNLESS', ('in_case',)),
+    ('UNLESS', ('given',)), ('UNLESS', ('given_that',)),
+    ('UNLESS', ('provided',)), ('UNLESS', ('provided_that',)),
+    ('UNLESS', ('providing',)), ('UNLESS', ('providing_that',)),
+    ('UNLESS', ('granted',)), ('UNLESS', ('granted_that',)),
+
+    ('HPAST', ('HAVE', 'PAST')), ('HPAST', ('HAVE', 'PAST')),
+    ('HAVE', ('have',)), ('HAVE', ('had',)),
+
+    ('PAST', ('past', )),   
+    # ('PAST', ('OTHERS', )),  # because we are lazy
+
+    ('WOULD', ('would',)), ('WOULD', ('should',)),
+    ('WOULD', ('could',)), ('WOULD', ('might',)),
+
+    ('OTHERS', ('e',))]
+
+
+def test_cyk2():
+    from cyk import cyk as original_cyk
+    import grammars as gm0
+    grammar_subjunctive_cnf = gm0.gm_to_cnf(grammar_subjunctive)
+    sent = ['e', 'should', 'e', 'unless', 'e', 'past', 'e']
+    # sent = [('e',), ('should',), ('e',), ('unless',), ('e',)]
+    res = original_cyk(goal=sent, grammar=grammar_subjunctive_cnf)
+    print("original_cyk:")
+    print(res)
+
+
+def test_cyk1():
+
+    import grammars as gm0
+    
+    grammar_subjunctive_cnf = gm0.gm_to_cnf(grammar_subjunctive)
+    # grammar_subjunctive_cnf
+
+    gammas = {}
+    tildas = {}
+    
+    sent = [('e',), ('should',), ('e',), ('unless',), ('e',), ('past',), ('e',)]
+    # sent = [('e',), ('should',), ('e',), ('unless',), ('e',)]
+    L = len(sent) - 1
+    res = cyk(sent, 0, L, 'E', gammas, tildas,
+              grammar=grammar_subjunctive_cnf,)
+    print("P(sent|grammar31)", res)
+    print("\ngammas, tildas:")
+    for idx in gammas:
+        print(idx, ": ", gammas[idx], "; ", tildas[idx])
+    g = make_parse_tree(sent, tildas, gammas)
+    print("\ngraph.edges:")
+    print(g.edges)
+    layout = nx.spring_layout(g)
+    nx.draw(g, pos=layout)
+    nx.draw_networkx_labels(g, layout, font_size=12)
+    plt.show()
+
+
 if __name__ == '__main__':
     '''
     ('E', 'AE') :  0.25
@@ -933,7 +1105,10 @@ if __name__ == '__main__':
     ('B', 'AE') :  0.06136185609043002
     ('B', 'b') :  0.6540203646794545
     '''
-    test_em(N=20, sent_len=7)
+    # test_cyk2()
+    test_cyk1()
+    # test_cyk()
+    # test_em(N=20, sent_len=7)
     # sent = list('eabaeeabbbeebeeeaaebbbbeeae')
     # sent = list('aae')
     # test_em_step(sent=sent, grammar=backward.grammar3)
